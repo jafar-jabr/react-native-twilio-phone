@@ -15,43 +15,25 @@ import com.reactnativetwiliophone.log
 
 class NotificationsHeadlessReceiver : HeadlessJsTaskService() {
 
-    @Nullable
-    override fun getTaskConfig(intent: Intent): HeadlessJsTaskConfig? {
-        val extras: Bundle? = intent.extras
-        if (extras != null) {
-            val notification =
-                    intent.getBundleExtra(Const.EXTRA_NOTIFIER)
-            val notificationMap: WritableMap = Arguments.fromBundle(notification)
-            notification?.let {
-             // stopViewService(intent)
+  @Nullable
+  override fun getTaskConfig(intent: Intent): HeadlessJsTaskConfig? {
+    val extras: Bundle? = intent.extras
+    if (extras != null) {
+      val notification =
+        intent.getBundleExtra(Const.EXTRA_NOTIFIER)
+      val notificationMap: WritableMap = Arguments.fromBundle(notification)
+      notification?.let {
+        // stopViewService(intent)
 
-                return HeadlessJsTaskConfig(
-                        "NotificationsListenerTask",
-                        notificationMap,
-                        5000,  // timeout for the task
-                        true // optional: defines whether or not  the task is allowed in foreground. Default is false
-                )
-            }
-
-
-          //stopViewService(intent)
-        }
-        return null
+        return HeadlessJsTaskConfig(
+          "NotificationsListenerTask",
+          notificationMap,
+          5000,  // timeout for the task
+          true // optional: defines whether or not  the task is allowed in foreground. Default is false
+        )
+      }
     }
-
-   fun stopViewService(name: Intent?) {
-     log("NotificationsHeadlessReceiver stopService")
-
-     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-       stopForeground(STOP_FOREGROUND_REMOVE)
-       ViewService().doUnbindService()
-      stopService(name)
-    }
-  }
-  override fun onDestroy() {
-    super.onDestroy()
-    // cancel any running threads here
-   // LocalBroadcastManager.getInstance(this).unregisterReceiver(NotificationsHeadlessReceiver)
+    return null
   }
 }
 

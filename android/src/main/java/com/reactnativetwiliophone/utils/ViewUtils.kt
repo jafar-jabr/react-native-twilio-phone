@@ -2,109 +2,52 @@ package com.reactnativetwiliophone.utils
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.ActivityManager
-import android.app.Service
-import android.content.*
-import android.content.Context.BIND_AUTO_CREATE
-import android.content.Context.BIND_IMPORTANT
+import android.content.Context
+import android.content.DialogInterface
+import android.content.Intent
 import android.content.Intent.FLAG_ACTIVITY_NO_HISTORY
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
-import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.ReadableMap
 import com.reactnativetwiliophone.Actions
 import com.reactnativetwiliophone.Const
 import com.reactnativetwiliophone.R
-import com.reactnativetwiliophone.callView.ServiceState
 import com.reactnativetwiliophone.callView.ViewService
-import com.reactnativetwiliophone.callView.getServiceState
 import com.reactnativetwiliophone.log
 
 
 object ViewUtils {
+  var serviceIntent: Intent? = null
 
   @SuppressLint("SuspiciousIndentation")
   fun showCallView(context: Context, data: ReadableMap) {
     val callerName = data.getString(Const.CALLER_NAME)
     val callSid = data.getString(Const.CALL_SID)
+    log("---------------------- showCallView start ------------------------")
 
     if (checkFloatingWindowPermission(context)) {
       if (callerName != null) {
-        val intent = Intent(context, ViewService::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        intent.addFlags(FLAG_ACTIVITY_NO_HISTORY)
-        intent.putExtra(Const.CALLER_NAME, callerName)
-        intent.putExtra(Const.CALL_SID, callSid)
-        intent.action = Actions.START.name
-        ContextCompat.startForegroundService(context, intent)
-        context.bindService(intent, ViewService().connection, 0);
+        serviceIntent = Intent(context, ViewService::class.java)
+        serviceIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        serviceIntent!!.addFlags(FLAG_ACTIVITY_NO_HISTORY)
+        serviceIntent!!.putExtra(Const.CALLER_NAME, callerName)
+        serviceIntent!!.putExtra(Const.CALL_SID, callSid)
+        serviceIntent!!.action = Actions.START.name
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          context.startForegroundService(serviceIntent)
+        } else {
+          context.startService(serviceIntent)
+        }
+        context.bindService(serviceIntent, ViewService().connection, 0);
       }
     }
   }
 
-
-    public fun actionOnService(action: Actions, context: Context, callerName: String) {
-
-    //if(checkServiceRunning(CallViewService::class.java,context)){
-     // log("============================ service was connected will closed =================");
-    //  context.stopService(Intent(context.applicationContext, CallViewService::class.java))
-   // }
- //  if (ApplicationLifecycleHandler.get().getNumStarted() > 0) {
-     // log("Starting RUNNING")
-
-      if (getServiceState(context) == ServiceState.STOPPED && action == Actions.STOP) return
-     // log("Starting isAppRunning")
-      val intent = Intent(context, ViewService::class.java)
-      intent.putExtra(Const.CALLER_NAME, callerName)
-      intent.action = action.name
-    //  intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-      intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-      intent.addFlags(FLAG_ACTIVITY_NO_HISTORY)
-     //intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
-     //intent.setFlags(DriveFile.MODE_READ_ONLY);
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-        //context.bindService(intent, callview.mConnection, 0);
-      } else {
-        context.startService(intent)
-       // context.bindService(intent, callview.mConnection, 0);
-      }
-  /*} else {
-
-      log("Starting KILLED")
-
-      val intent2 = Intent(context, CallViewInKilled::class.java)
-      intent2.putExtra(Const.CALLER_NAME, callerName)
-     intent2.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-     intent2.addFlags(FLAG_ACTIVITY_NO_HISTORY)
-
-      context.startService(intent2)
-
-    }*/
-
+  fun stopService(context: Context) {
+    context.stopService(serviceIntent)
   }
-  fun checkServiceRunning(serviceClass: Class<*>,context: Context) : Boolean  {
-    log("======================= call check ServiceIfRunning 222=================");
-    val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    for (service in manager.getRunningServices(Int.MAX_VALUE)) {
-      if (serviceClass.name == service.service.className) {
-        return true
-      }
-    }
-    return false
-  }
-  fun isServiceRunning(serviceClassName: String?,context: Context): Boolean {
-    val activityManager =
-      context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    val services: List<ActivityManager.RunningServiceInfo> = activityManager.getRunningServices(Int.MAX_VALUE)
-    for (runningServiceInfo in services) {
-      if (runningServiceInfo.service.getClassName().equals(serviceClassName)) {
-        return true
-      }
-    }
-    return false
-  }
+
   private fun checkFloatingWindowPermission(context: Context): Boolean {
     //val foregroud: Boolean = ForegroundCheckTask()!.execute(context).get()
 
