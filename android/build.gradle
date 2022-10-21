@@ -127,6 +127,7 @@ dependencies {
   // noinspection GradleDynamicVersion
   implementation 'com.facebook.react:react-native:+'
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-
+  implementation 'org.parceler:parceler-api:1.1.12'
+  annotationProcessor 'org.parceler:parceler:1.1.12'
   implementation 'com.twilio:voice-android:6.0.7'
 }

@@ -1,11 +1,29 @@
 package com.reactnativetwiliophone
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Context.MODE_PRIVATE
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.media.AudioManager
+import android.media.RingtoneManager
+import android.net.TrafficStats
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
+import androidx.core.app.ActivityCompat.startActivityForResult
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.LocusIdCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
 import com.reactnativetwiliophone.callView.ViewService
@@ -31,6 +49,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
   fun register(accessToken: String, deviceToken: String) {
     log("Registering")
     StaticConst.IS_RUNNING = true
+    ViewService().cancelPushNotification(reactApplicationContext)
     Voice.register(
       accessToken,
       Voice.RegistrationChannel.FCM,
@@ -52,6 +71,17 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
           sendEvent(reactApplicationContext, Const.REGISTER_FAILURE, params)
         }
       })
+
+    val acitivity = currentActivity
+    if (acitivity != null) {
+      log("on register twillio ======================== save Bakage name =====================${acitivity.packageName}")
+      val editor: SharedPreferences.Editor = acitivity.getSharedPreferences(Const.PREFS_NAME, MODE_PRIVATE).edit()
+      editor.putString(Const.PACKAGE_ID, acitivity.packageName)
+      editor.putString(Const.ACTIVITY_LAUNCHER_NAME, acitivity.packageName+Const.MAIN_ACTIVITY)
+
+      editor.apply()
+    }
+
   }
 
   @ReactMethod
@@ -59,6 +89,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     val acitivity = currentActivity
     if (acitivity != null) {
       ViewUtils.checkWindowsDrawWithDialogPermission(acitivity, reactApplicationContext);
+      //ViewUtils.checkDisplayBubblesPermission(acitivity, reactApplicationContext);
     }
   }
 
@@ -66,9 +97,15 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun showCallNotification(payload: ReadableMap) {
     log("show incomming call ------------------------------")
-    ViewUtils.showCallView(reactApplicationContext, payload);
-  }
 
+      TrafficStats.clearThreadStatsTag();
+   // reactApplicationContext.getCurrentActivity()?.runOnUiThread(Runnable {
+      ViewUtils.showCallView(reactApplicationContext, payload);
+   // })
+//  //  onMainThread {
+ //     ViewUtils.showCallView(reactApplicationContext, payload);
+  //  }
+  }
   @ReactMethod
   fun handleMessage(payload: ReadableMap) {
     log("Handling message")
@@ -84,13 +121,13 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         log("Call invite received")
         activeCallInvites[callInvite.callSid] = callInvite
 
+
         val from = callInvite.from ?: ""
-        val caller = from.replace(Const.CLIENT, "")
         val params = Arguments.createMap()
         params.putString(Const.CALL_SID, callInvite.callSid)
-        params.putString(Const.FROM, caller)
+        params.putString(Const.FROM,  from.replace(Const.CLIENT, ""))
         val pushData = Arguments.createMap()
-        pushData.putString(Const.CALLER_NAME, caller)
+        pushData.putString(Const.CALLER_NAME,  from.replace(Const.CLIENT, ""))
         pushData.putString(Const.CALL_SID, callInvite.callSid)
 //        showCallNotification(pushData)
         sendEvent(reactApplicationContext, Const.CALL_INVITE, params)
@@ -106,6 +143,9 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         val params = Arguments.createMap()
         params.putString(Const.CALL_SID, cancelledCallInvite.callSid)
         ViewService().cancelPushNotification(reactApplicationContext)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+         showMissedCallNotification(reactApplicationContext,cancelledCallInvite.callSid,"Missed Call")
+        }
         sendEvent(reactApplicationContext, Const.CANCELLED_CALL_INVITE, params)
       }
     })
@@ -128,11 +168,13 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
 
     activeCalls[callSid] = call
     activeCallInvites.remove(callSid)
+
+    //new not in original
     val params = Arguments.createMap()
     params.putString(Const.CALL_SID, callSid)
     sendEvent(reactApplicationContext, Const.CALL_CONNECTED, params)
-  }
 
+  }
   @ReactMethod
   fun rejectCallInvite(callSid: String) {
     log("Rejecting call invite")
@@ -145,6 +187,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     activeCallInvites[callSid]!!.reject(reactApplicationContext)
 
     activeCallInvites.remove(callSid)
+
   }
 
   @ReactMethod
@@ -289,11 +332,15 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun addListener(eventName: String?) {
+    log("addListener eventName= $eventName")
+
     // Set up any upstream listeners or background tasks as necessary
   }
 
   @ReactMethod
   fun removeListeners(count: Int?) {
+    log("removeListeners")
+
     // Remove upstream listeners, stop unnecessary background tasks
   }
 
@@ -355,7 +402,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         log("Call did connect")
 
         val params = Arguments.createMap()
-        params.putString("callSid", call.sid)
+        params.putString(Const.CALL_SID, call.sid)
 
         sendEvent(reactApplicationContext, Const.CALL_CONNECTED, params)
       }
@@ -370,7 +417,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         params.putInt(Const.ERROR_CODE, error.errorCode)
         params.putString(Const.ERROR_MESSAGE, error.message)
 
-        sendEvent(reactApplicationContext, Const.CALL_CONNECTING, params)
+        sendEvent(reactApplicationContext, Const.CALL_RE_CONNECTING, params)
       }
 
       override fun onReconnected(call: Call) {
@@ -379,7 +426,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         val params = Arguments.createMap()
         params.putString(Const.CALL_SID, call.sid)
 
-        sendEvent(reactApplicationContext, Const.CALL_CONNECTED, params)
+        sendEvent(reactApplicationContext, Const.CALL_RE_CONNECTED, params)
       }
 
       override fun onDisconnected(call: Call, error: CallException?) {
@@ -411,6 +458,71 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
       else -> {
         "UNKNOWN"
       }
+    }
+  }
+
+  @RequiresApi(Build.VERSION_CODES.O)
+  public  fun showMissedCallNotification(context:Context,shortCutId:String,msgCall:String) {
+
+    val prefs: SharedPreferences = context.getSharedPreferences(Const.PREFS_NAME, MODE_PRIVATE)
+    val callerName = prefs.getString(Const.CALLER_NAME, "irisCrm").toString() //"No name defined" is the default value.
+
+    val notificationIntent = Intent(context, Class.forName(reactApplicationContext.packageName+Const.MAIN_ACTIVITY)::class.java)
+    val pendingIntent: PendingIntent =
+      PendingIntent.getActivity(context,  Const.MISSED_CALL_REQUEST_CODE, notificationIntent,flagCanelCurrent(mutable = true))
+    val bubbleData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      NotificationCompat.BubbleMetadata.Builder(pendingIntent,
+        IconCompat.createWithResource(context, R.drawable.ic_baseline_call_missed_24))
+        .setDesiredHeight(600)
+        .build()
+    } else {
+      null
+    }
+    val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (notificationManager.getNotificationChannel(Const.MISSED_CALL_CHANNEL_ID)   == null) {
+      val channel = NotificationChannel(
+        Const.MISSED_CALL_CHANNEL_ID,
+        Const.MISSED_CALL_CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH
+      )
+      channel.lightColor = Color.BLUE
+      channel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+      notificationManager.createNotificationChannel(channel)
+    }
+    val notificationBuilder: NotificationCompat.Builder=
+      NotificationCompat.Builder(context, Const.MISSED_CALL_CHANNEL_ID)
+        .setContentIntent(pendingIntent)
+        .setSmallIcon(R.drawable.ic_baseline_call_missed_24)
+        .setContentTitle(msgCall)
+        .setContentText(callerName)
+        .setChannelId(Const.MISSED_CALL_CHANNEL_ID)
+        .setTicker("Call_STATUS")
+        .setSound(ringtoneUri)
+        .setCategory(Notification.CATEGORY_MISSED_CALL)
+        .setShortcutId("missed_$shortCutId")
+        .setLocusId(LocusIdCompat("missed_${shortCutId.toString()}"))
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .setShowWhen(true)
+    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R){
+      notificationBuilder.setBubbleMetadata(bubbleData)
+      log("SETT bubble missed call notify ************************ success")
+
+    }
+    notificationBuilder.build()
+    notificationManager.notify(0, notificationBuilder.build())
+
+  }
+
+   fun flagCanelCurrent(mutable: Boolean): Int {
+    return if (mutable) {
+      if (Build.VERSION.SDK_INT >= 31) {
+        PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
+      } else {
+        PendingIntent.FLAG_CANCEL_CURRENT
+      }
+    } else {
+      PendingIntent.FLAG_CANCEL_CURRENT
     }
   }
 }
