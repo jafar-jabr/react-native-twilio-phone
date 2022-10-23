@@ -93,19 +93,13 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     }
   }
 
-
-  @ReactMethod
   fun showCallNotification(payload: ReadableMap) {
     log("show incomming call ------------------------------")
 
-      TrafficStats.clearThreadStatsTag();
-   // reactApplicationContext.getCurrentActivity()?.runOnUiThread(Runnable {
-      ViewUtils.showCallView(reactApplicationContext, payload);
-   // })
-//  //  onMainThread {
- //     ViewUtils.showCallView(reactApplicationContext, payload);
-  //  }
+      TrafficStats.clearThreadStatsTag()
+      ViewUtils.showCallView(reactApplicationContext, payload)
   }
+
   @ReactMethod
   fun handleMessage(payload: ReadableMap) {
     log("Handling message")
@@ -129,8 +123,8 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         val pushData = Arguments.createMap()
         pushData.putString(Const.CALLER_NAME,  from.replace(Const.CLIENT, ""))
         pushData.putString(Const.CALL_SID, callInvite.callSid)
-//        showCallNotification(pushData)
         sendEvent(reactApplicationContext, Const.CALL_INVITE, params)
+        showCallNotification(pushData);
       }
 
       override fun onCancelledCallInvite(
