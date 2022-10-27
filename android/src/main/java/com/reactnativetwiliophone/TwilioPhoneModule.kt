@@ -14,19 +14,14 @@ import android.media.AudioManager
 import android.media.RingtoneManager
 import android.net.TrafficStats
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.provider.Settings
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
-import androidx.core.app.ActivityCompat.startActivityForResult
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.LocusIdCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
-import com.reactnativetwiliophone.callView.ViewService
 import com.reactnativetwiliophone.utils.ViewUtils
 import com.twilio.voice.*
 
@@ -49,7 +44,6 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
   fun register(accessToken: String, deviceToken: String) {
     log("Registering")
     StaticConst.IS_RUNNING = true
-    ViewService().cancelPushNotification(reactApplicationContext)
     Voice.register(
       accessToken,
       Voice.RegistrationChannel.FCM,
@@ -93,11 +87,20 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  @ReactMethod
   fun showCallNotification(payload: ReadableMap) {
     log("show incomming call ------------------------------")
 
       TrafficStats.clearThreadStatsTag()
       ViewUtils.showCallView(reactApplicationContext, payload)
+//      Handler().postDelayed({ ViewUtils.stopService(reactApplicationContext) }, 3000)
+  }
+
+  @ReactMethod
+  fun hideCallNotification() {
+    log("hide incomming call ------------------------------")
+    TrafficStats.clearThreadStatsTag()
+    ViewUtils.stopService(reactApplicationContext)
   }
 
   @ReactMethod
@@ -132,13 +135,11 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         callException: CallException?
       ) {
         log("Cancelled call invite received")
-        ViewUtils.stopService(reactApplicationContext)
         activeCallInvites.remove(cancelledCallInvite.callSid)
         val params = Arguments.createMap()
         params.putString(Const.CALL_SID, cancelledCallInvite.callSid)
-        ViewService().cancelPushNotification(reactApplicationContext)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-         showMissedCallNotification(reactApplicationContext,cancelledCallInvite.callSid,"Missed Call")
+//         showMissedCallNotification(reactApplicationContext,cancelledCallInvite.callSid,"Missed Call")
         }
         sendEvent(reactApplicationContext, Const.CANCELLED_CALL_INVITE, params)
       }
