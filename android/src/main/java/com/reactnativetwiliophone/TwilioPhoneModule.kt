@@ -210,6 +210,21 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
+  fun endAllCalls() {
+    log("Ending all calls")
+    activeCallInvites.forEach { (callSid, activeCallInvite) ->
+      activeCallInvite.reject(reactApplicationContext)
+      activeCallInvites.remove(callSid)
+    }
+    activeCalls.forEach { (callSid, activeCall) ->
+      activeCall.disconnect()
+      activeCalls.remove(callSid)
+    }
+
+    log("Unknown sid to perform end-call action with")
+  }
+
+  @ReactMethod
   fun toggleMuteCall(callSid: String, mute: Boolean) {
     log("Toggling mute call")
 
