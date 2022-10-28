@@ -20,7 +20,6 @@ internal fun View.updateGestureExclusion(context: Context) {
   val rect = Rect(0, 0, this.width, screenSize.height)
   exclusionRects.add(rect)
 
-
   this.systemGestureExclusionRects = exclusionRects
 }
 

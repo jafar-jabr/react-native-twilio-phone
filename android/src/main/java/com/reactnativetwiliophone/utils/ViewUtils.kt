@@ -17,44 +17,54 @@ import com.facebook.react.bridge.ReadableMap
 import com.reactnativetwiliophone.Actions
 import com.reactnativetwiliophone.Const
 import com.reactnativetwiliophone.callView.ViewService
+import com.reactnativetwiliophone.callView.tryOnly
 import com.reactnativetwiliophone.log
 
 
 object ViewUtils {
   var serviceIntent: Intent? = null
+  var currentState = "OFF"
 
   @SuppressLint("SuspiciousIndentation")
   fun showCallView(context: Context, data: ReadableMap) {
-    val callerName = data.getString(Const.CALLER_NAME)
-    val callSid = data.getString(Const.CALL_SID)
-    log("---------------------- showCallView start ------------------------")
+    if(currentState == "OFF") {
+      currentState = "ON"
+      val callerName = data.getString(Const.CALLER_NAME)
+      val callSid = data.getString(Const.CALL_SID)
+      log("---------------------- showCallView start ------------------------")
 
-    if (checkFloatingWindowPermission(context)) {
-      if (callerName != null) {
-        serviceIntent = Intent(context, ViewService::class.java)
-        serviceIntent!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-       // serviceIntent!!.addFlags(FLAG_ACTIVITY_NO_HISTORY)
-        serviceIntent!!.putExtra(Const.CALLER_NAME, callerName)
-        serviceIntent!!.putExtra(Const.CALL_SID, callSid)
-        serviceIntent!!.putExtra(Const.CALLER_IMAGE, "ic_notify.png")
-        serviceIntent!!.putExtra(Const.MESSAGE_CALL, "Incoming Call ....")
-        serviceIntent!!.action = Actions.START.name
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          //context.startForegroundService(serviceIntent)
-          ContextCompat.startForegroundService(
-            context,
-            serviceIntent!!
-          );
-        } else {
-          context.startService(serviceIntent)
+      if (checkFloatingWindowPermission(context)) {
+        if (callerName != null) {
+          serviceIntent = Intent(context, ViewService::class.java)
+          serviceIntent!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          // serviceIntent!!.addFlags(FLAG_ACTIVITY_NO_HISTORY)
+          serviceIntent!!.putExtra(Const.CALLER_NAME, callerName)
+          serviceIntent!!.putExtra(Const.CALL_SID, callSid)
+          serviceIntent!!.putExtra(Const.CALLER_IMAGE, "ic_notify.png")
+          serviceIntent!!.putExtra(Const.MESSAGE_CALL, "Incoming Call ....")
+          serviceIntent!!.action = Actions.START.name
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            //context.startForegroundService(serviceIntent)
+            ContextCompat.startForegroundService(
+              context,
+              serviceIntent!!
+            );
+          } else {
+            context.startService(serviceIntent)
+          }
+          context.bindService(serviceIntent, ViewService().connection, 0);
         }
-        context.bindService(serviceIntent, ViewService().connection, 0);
       }
     }
   }
 
   fun stopService(context: Context) {
-    context.stopService(serviceIntent)
+    if(currentState == "ON") {
+      currentState = "OFF"
+      tryOnly {
+        context.stopService(serviceIntent)
+      }
+    }
   }
 
   private fun checkFloatingWindowPermission(context: Context): Boolean {

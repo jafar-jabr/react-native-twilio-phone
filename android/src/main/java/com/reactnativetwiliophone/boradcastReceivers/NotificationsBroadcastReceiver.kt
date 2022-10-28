@@ -10,10 +10,8 @@ import android.os.Bundle
 import androidx.core.app.NotificationManagerCompat
 import com.facebook.react.HeadlessJsTaskService
 import com.facebook.react.ReactApplication
-import com.reactnativetwiliophone.Actions
 import com.reactnativetwiliophone.Const
 import com.reactnativetwiliophone.TwilioPhoneModule
-import com.reactnativetwiliophone.log
 
 
 class NotificationsBroadcastReceiver : BroadcastReceiver() {
@@ -75,10 +73,6 @@ class NotificationsBroadcastReceiver : BroadcastReceiver() {
           if (action != "tabbed") {
             val notificationManager = NotificationManagerCompat.from(context)
             notificationManager.cancel(notificationId)
-          }
-          if (intent.action == Actions.STOP.name) {
-            log("Starting the service in NotificationsBroadcastReceiver")
-            context.stopService(intent)
           }
         } catch (ignored: IllegalStateException) {
         }

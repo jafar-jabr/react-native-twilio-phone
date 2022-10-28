@@ -87,12 +87,10 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  @ReactMethod
   fun showCallNotification(payload: ReadableMap) {
-    log("show incomming call ------------------------------")
-
+      log("show incomming call ------------------------------")
       TrafficStats.clearThreadStatsTag()
-      ViewUtils.showCallView(reactApplicationContext, payload)
+      ViewUtils.showCallView(reactApplicationContext.applicationContext, payload)
 //      Handler().postDelayed({ ViewUtils.stopService(reactApplicationContext) }, 3000)
   }
 
@@ -100,7 +98,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
   fun hideCallNotification() {
     log("hide incomming call ------------------------------")
     TrafficStats.clearThreadStatsTag()
-    ViewUtils.stopService(reactApplicationContext)
+    ViewUtils.stopService(reactApplicationContext.applicationContext)
   }
 
   @ReactMethod
@@ -118,7 +116,6 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         log("Call invite received")
         activeCallInvites[callInvite.callSid] = callInvite
 
-
         val from = callInvite.from ?: ""
         val params = Arguments.createMap()
         params.putString(Const.CALL_SID, callInvite.callSid)
@@ -126,8 +123,8 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         val pushData = Arguments.createMap()
         pushData.putString(Const.CALLER_NAME,  from.replace(Const.CLIENT, ""))
         pushData.putString(Const.CALL_SID, callInvite.callSid)
+        showCallNotification(pushData)
         sendEvent(reactApplicationContext, Const.CALL_INVITE, params)
-        showCallNotification(pushData);
       }
 
       override fun onCancelledCallInvite(
@@ -138,9 +135,6 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         activeCallInvites.remove(cancelledCallInvite.callSid)
         val params = Arguments.createMap()
         params.putString(Const.CALL_SID, cancelledCallInvite.callSid)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-//         showMissedCallNotification(reactApplicationContext,cancelledCallInvite.callSid,"Missed Call")
-        }
         sendEvent(reactApplicationContext, Const.CANCELLED_CALL_INVITE, params)
       }
     })
