@@ -235,11 +235,11 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
       }
     }
 
-    if(isDeviceLocked(this)){
+  /*  if(isDeviceLocked(this)){
       log("************************ NOTIFY ===================== isPhoneLocked : "+isDeviceLocked(this).toString())
       mNotificationManager?.notify(0, setupNotificationBuilder(Const.INCOMING_CALL_CHANNEL_ID))
       //return null
-    }
+    }*/
     log("return view ************************ NOTIFY ===================== isPhoneLocked : "+isDeviceLocked(this).toString())
 
     return CallView.Builder()
@@ -344,9 +344,9 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
           .setShowWhen(true)
       }
 
-    if(isDeviceLocked(this)){
+   /* if(isDeviceLocked(this)){
       notificationBuilder.setSound(ringtoneUri)
-    }
+    }*/
     if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R){
       notificationBuilder.setBubbleMetadata(bubbleData)
       log("SETT bubble call notify ************************ success")

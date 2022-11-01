@@ -87,6 +87,8 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     }
   }
 
+
+  @ReactMethod
   fun showCallNotification(payload: ReadableMap) {
       log("show incomming call ------------------------------")
       TrafficStats.clearThreadStatsTag()
@@ -136,6 +138,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         val params = Arguments.createMap()
         params.putString(Const.CALL_SID, cancelledCallInvite.callSid)
         sendEvent(reactApplicationContext, Const.CANCELLED_CALL_INVITE, params)
+        hideCallNotification()
       }
     })
 
@@ -162,7 +165,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     val params = Arguments.createMap()
     params.putString(Const.CALL_SID, callSid)
     sendEvent(reactApplicationContext, Const.CALL_CONNECTED, params)
-
+    hideCallNotification();
   }
   @ReactMethod
   fun rejectCallInvite(callSid: String) {
@@ -176,7 +179,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     activeCallInvites[callSid]!!.reject(reactApplicationContext)
 
     activeCallInvites.remove(callSid)
-
+    hideCallNotification();
   }
 
   @ReactMethod
@@ -205,7 +208,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
       activeCalls[callSid]!!.disconnect()
       return
     }
-
+    hideCallNotification();
     log("Unknown sid to perform end-call action with")
   }
 
@@ -220,7 +223,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
       activeCall.disconnect()
       activeCalls.remove(callSid)
     }
-
+    hideCallNotification();
     log("Unknown sid to perform end-call action with")
   }
 
