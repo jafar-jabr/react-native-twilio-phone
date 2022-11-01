@@ -50,6 +50,8 @@ type TwilioPhoneType = {
   checkPermissions(callback: (permissions: Permissions) => void): void;
   showCallNotification(payload: Record<string, any>,): void;
   requestWindowsDrawPermission():void;
+  hideCallNotification():void;
+  endAllCalls():void;
 };
 
 const TwilioPhone = NativeModules.TwilioPhone as TwilioPhoneType;
