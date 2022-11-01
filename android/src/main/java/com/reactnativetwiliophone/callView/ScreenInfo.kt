@@ -76,6 +76,4 @@ internal object ScreenInfo {
       return Size(metrics.widthPixels, metrics.heightPixels)
     }
   }
-
-
 }

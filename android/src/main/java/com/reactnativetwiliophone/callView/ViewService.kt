@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.app.*
 import android.content.*
-import android.graphics.Color
+import android.content.pm.ShortcutManager
+import android.graphics.*
 import android.media.Ringtone
+import android.media.RingtoneManager
 import android.os.*
 import android.view.LayoutInflater
 import android.view.View
@@ -13,42 +15,43 @@ import android.widget.ImageButton
 import android.widget.TextView
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationCompat.*
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.LocusIdCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.facebook.react.HeadlessJsTaskService
 import com.reactnativetwiliophone.Actions
 import com.reactnativetwiliophone.Const
 import com.reactnativetwiliophone.R
-import com.reactnativetwiliophone.data.Call
-import com.reactnativetwiliophone.data.Contact
-import com.reactnativetwiliophone.data.NotificationHelper
 import com.reactnativetwiliophone.boradcastReceivers.NotificationsHeadlessReceiver
 import com.reactnativetwiliophone.log
+import java.util.*
 
 
 class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
 
   var mNotificationManager: NotificationManager? = null
-  private var notificationHelper: NotificationHelper? = null
-
-  private var mBinder: IBinder = LocalBinder()
+  var mBinder: IBinder = LocalBinder()
   private var mIntent: Intent? = null
   private var extras: Bundle? = null
-  private var mBound: Boolean = false
-  private var isStarted: Boolean? = false
+  var mBound: Boolean = false
+  var isStarted: Boolean? = false
   private var isServiceStarted = false
   private var mStartId = 0
   var binder: Binder? = null
-  var callerName: String? = ""
-  var callSid: String? = "0"
-  var textMessage: String? = ""
-  var callerImage: String? = ""
-  var backageName :String = ""
+  var shortCutId: String? = null
+  var callerId: String? = null
+  var callerName: String? = null
+  var msgCall: String? = null
+  var activityLauncherName :String = ""
+  var packageId :String = ""
+  private var ringtone: Ringtone? = null
 
   companion object {
     @JvmStatic
     lateinit var instance: ViewService
-    private const val REQUEST_CONTENT = 1
-    private const val REQUEST_BUBBLE = 2
   }
 
   init {
@@ -104,43 +107,56 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
 
   @RequiresApi(Build.VERSION_CODES.O)
   fun startViewForeground() {
-    notificationHelper= NotificationHelper(this)
-    val channelId = if (isHigherThanAndroid8()) {
-       notificationHelper!!.setUpNotificationChannels(Const.INCOMING_CALL_CHANNEL_ID, Const.INCOMING_CALL_CHANNEL_NAME)
-    } else {
-      // In earlier version, channel ID is not used
-      // https://developer.android.com/reference/android/support/v4/app/NotificationCompat.Builder.html#NotificationCompat.Builder(android.content.Context)
-      ""
-    }
-    val notification = setupNotificationBuilder(channelId)
-    log("startViewForeground")
 
-    startForeground(Const.NOTIFICATION_ID, notification)
-    this.isStarted = true
+      var ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+
+      if (ringtoneUri == null) {
+        ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        if (ringtoneUri == null) {
+          ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        }
+      }
+      ringtone = RingtoneManager.getRingtone(this, ringtoneUri)
+      ringtone?.play()
+
+
+      val channelId = if (isHigherThanAndroid8()) {
+        createNotificationChannel(
+          Const.INCOMING_CALL_CHANNEL_ID,
+          Const.INCOMING_CALL_CHANNEL_NAME)
+      } else {
+        // In earlier version, channel ID is not used
+        // https://developer.android.com/reference/android/support/v4/app/NotificationCompat.Builder.html#NotificationCompat.Builder(android.content.Context)
+        ""
+      }
+      val notification = setupNotificationBuilder(channelId)
+    /*  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        try{
+       // notification.headsUpContentView =RemoteViews(packageName, R.layout.call_view)
+        }catch (e:Exception){
+          log("======================== startViewForeground headsUpContentView ERRROR ${e.toString()}")
+        }
+      }*/
+      log("startViewForeground")
+      startForeground(Const.INCOMING_CALL_NOTIFICATION_ID, notification)
+      this.isStarted = true
 
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    notificationHelper= NotificationHelper(this)
-
-    val startIntent = Intent(this, RingtonePlayingService::class.java)
-    startService(startIntent)
 
     val prefs: SharedPreferences = this.getSharedPreferences(Const.PREFS_NAME, MODE_PRIVATE)
-     backageName = prefs.getString(Const.BAKAGE_NAME, "com.iriscrm").toString() //"No name defined" is the default value.
-    log("======================== onStartCommand get Bakage name =====================${backageName}")
+    activityLauncherName = prefs.getString(Const.ACTIVITY_LAUNCHER_NAME, "com.iriscrm"+Const.MAIN_ACTIVITY).toString() //"No name defined" is the default value.
+    packageId= prefs.getString(Const.PACKAGE_ID, "com.iriscrm").toString()
+    log("======================== onStartCommand get Bakage name =====================${activityLauncherName}")
 
     if (intent != null) {
-      //val action = intent.action
+      log("onStartCommand action=" + intent.action)
+      val action = intent.action
       mIntent = intent
       mStartId = startId
       extras = intent.extras
-      callerName=  extras!!.getString(Const.EXTRA_CALLER_NAME)
-      callSid=  extras!!.getString(Const.EXTRA_CALL_SID)
-      callerImage= extras!!.getString(Const.EXTRA_CALLER_IMAGE)
-      textMessage=  extras!!.getString(Const.EXTRA_TXT_MESSAGE)
-      log("onStartCommand extras callerName $callerName")
-
+      log("using an intent with action $action")
       // if (action === Actions.STOP.name) {
       //  stopSelf()
       //  stopSelfResult(startId)
@@ -149,9 +165,20 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
         setupViewAppearance()
         if (isHigherThanAndroid8()) {
           if (this.isStarted == false) {
-            log("onStartCommand startViewForeground")
+            if(extras!=null) {
+              callerId = extras!!.getString(Const.CALL_SID)
+              callerName= extras!!.getString(Const.CALLER_NAME)
+              msgCall= extras!!.getString(Const.MESSAGE_CALL)
+              val editor: SharedPreferences.Editor=prefs.edit()
+              editor.putString(Const.CALLER_NAME, callerName)
+              shortCutId = "contact_"+callerId
+              log("onCreate callerName $callerName")
+              log("onCreate callerId $callerId")
+              log("onCreate shortCutId $shortCutId")
+              log("onCreate msgCall $msgCall")
 
-            startViewForeground()
+              startViewForeground()
+            }
           }
         }
 
@@ -164,9 +191,18 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
   override fun onCreate() {
     super.onCreate()
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      if(extras!=null){
-        startViewForeground()
+      if(extras!=null) {
+        callerId = extras!!.getString(Const.CALL_SID)
+        callerName= extras!!.getString(Const.CALLER_NAME)
+        msgCall= extras!!.getString(Const.MESSAGE_CALL)
 
+        shortCutId = "contact_"+callerId
+        log("onCreate callerName $callerName")
+        log("onCreate callerId $callerId")
+        log("onCreate shortCutId $shortCutId")
+        log("onCreate msgCall $msgCall")
+
+        startViewForeground()
       }
     }
   }
@@ -174,9 +210,10 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
   override fun setupCallView(action: CallView.Action): CallView.Builder? {
     val inflater = getSystemService(LAYOUT_INFLATER_SERVICE) as LayoutInflater
     val layout = inflater.inflate(R.layout.call_view, null)
+
     val textView: TextView = layout.findViewById(R.id.callerNameV)
-    if (callerName != ""||callerName != null) {
-      textView.text = callerName
+    if (extras != null) {
+      textView.text = extras!!.getString(Const.CALLER_NAME)
     }
     val imgDeclineBtn: ImageButton = layout.findViewById(R.id.imgDecline)
     val imgAnswerBtn: ImageButton = layout.findViewById(R.id.imgAnswer)
@@ -184,7 +221,7 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
       extras?.let {
         handleIntent(
           it,
-          Const.EXTRA_ANSWER
+          Const.ANSWER
         )
       }
     }
@@ -193,41 +230,202 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
       extras?.let {
         handleIntent(
           it,
-          Const.EXTRA_REJECT
+          Const.REJECT
         )
       }
     }
-    return CallView.Builder()
-      .with(this)
-      .setCallView(layout)
-      .setDimAmount(0.8f)
-      .addCallViewListener(object : CallView.Action {
-        override fun popCallView() {
-          popCallView()
-        }
 
-        override fun onOpenCallView() {
-          isServiceStarted = true
-        }
-      })
+  /*  if(isDeviceLocked(this)){
+      log("************************ NOTIFY ===================== isPhoneLocked : "+isDeviceLocked(this).toString())
+      mNotificationManager?.notify(0, setupNotificationBuilder(Const.INCOMING_CALL_CHANNEL_ID))
+      //return null
+    }*/
+    log("return view ************************ NOTIFY ===================== isPhoneLocked : "+isDeviceLocked(this).toString())
+
+    return CallView.Builder()
+        .with(this)
+        .setCallView(layout)
+        .setDimAmount(0.8f)
+        .addCallViewListener(object : CallView.Action {
+          override fun popCallView() {
+            popCallView()
+          }
+
+          override fun onOpenCallView() {
+            isServiceStarted = true
+          }
+        })
+
   }
 
+  fun isDeviceLocked(context: Context): Boolean {
+    var isLocked = false
+
+    // First we check the locked state
+    val keyguardManager = context.getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+    val inKeyguardRestrictedInputMode = keyguardManager.inKeyguardRestrictedInputMode()
+    isLocked = if (inKeyguardRestrictedInputMode) {
+      true
+    } else {
+      // If password is not set in the settings, the inKeyguardRestrictedInputMode() returns false,
+      // so we need to check if screen on for this case
+      val powerManager: PowerManager = context.getSystemService(POWER_SERVICE) as PowerManager
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+        !powerManager.isInteractive()
+      } else {
+        !powerManager.isScreenOn()
+      }
+    }
+    log(String.format("Now device is %s.", if (isLocked) "locked" else "unlocked"))
+    return isLocked
+  }
+
+  //=======================================================================================
 
   fun setupNotificationBuilder(channelId: String): Notification {
-
-    val contact: Contact = object : Contact(callSid!!, "contact_$callSid", callerName!!,textMessage!!, callerImage!!) {
-      override fun reply(text: String) = buildReply().apply { this.text = textMessage }
+    val target = if(isDeviceLocked(this)){
+      Intent(this, ViewService::class.java)
+    }else{
+      Intent(this,  Class.forName(activityLauncherName)::class.java)
     }
 
-    log("setupNotificationBuilder callerName ${contact.name}")
-    log("setupNotificationBuilder id ${contact.id}  callSid =${callSid}")
-    log("setupNotificationBuilder scld ${contact.scId}")
-    log("setupNotificationBuilder callerImage ${contact.icon}")
-    log("setupNotificationBuilder textMessage ${contact.message}")
-    val call  = Call(contact)
-    return notificationHelper!!.setupNotificationBuilder(call,true,true,channelId)
+    val pendingIntent: PendingIntent =
+      PendingIntent.getActivity(this,  Const.INCOMIN_CALL_REQUEST_CODE, target,flagUpdateCurrent(mutable = true))
+    val category = "$packageId.category.IMG_SHARE_TARGET"
+
+    val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+    val bubbleData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      BubbleMetadata.Builder(shortCutId.toString())
+        .setDesiredHeight(600)
+        .setAutoExpandBubble(true)
+        .setSuppressNotification(true)
+        .build()
+    } else {
+      null
+    }
+
+    val fullScreenIntent = Intent(this, Class.forName(activityLauncherName)::class.java
+    )
+    val fullScreenPendingIntent = PendingIntent.getActivity(this, Const.INCOMIN_CALL_REQUEST_CODE,
+      fullScreenIntent, flagUpdateCurrent(mutable = true))
+
+    createAppShortcut()
+    val notificationBuilder =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        Builder(this, channelId)
+          .setContentIntent(pendingIntent)
+          .setFullScreenIntent(fullScreenPendingIntent,true)
+          .setOngoing(true)
+          .setSmallIcon(R.drawable.ic_baseline_wifi_calling_3_24)
+          .setContentTitle(callerName)
+          .setContentText(msgCall)
+          .setChannelId(Const.INCOMING_CALL_CHANNEL_ID)
+          .setTicker("Call_STATUS")
+          .setShortcutId(shortCutId)
+          .setLocusId(LocusIdCompat(shortCutId.toString()))
+          .setPriority(PRIORITY_HIGH)
+          .setCategory(Notification.CATEGORY_CALL)
+          .setOnlyAlertOnce(true)
+          .setShowWhen(true)
+      } else {
+        Builder(this, channelId)
+          .setContentIntent(pendingIntent)
+          .setFullScreenIntent(fullScreenPendingIntent,true)
+          .setOngoing(true)
+          .setSmallIcon(R.drawable.ic_baseline_wifi_calling_3_24)
+          .setContentTitle(callerName)
+          .setContentText(msgCall)
+          .setChannelId(Const.INCOMING_CALL_CHANNEL_ID)
+          .setTicker("Call_STATUS")
+          .setShortcutId(shortCutId)
+          .setLocusId(LocusIdCompat(shortCutId.toString()))
+          .setPriority(PRIORITY_HIGH)
+          .setOnlyAlertOnce(true)
+          .setShowWhen(true)
+      }
+
+   /* if(isDeviceLocked(this)){
+      notificationBuilder.setSound(ringtoneUri)
+    }*/
+    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R){
+      notificationBuilder.setBubbleMetadata(bubbleData)
+      log("SETT bubble call notify ************************ success")
+
+    }
+    log("return notificationBuilder ************************ NOTIFY ===================== isPhoneLocked : "+isDeviceLocked(this).toString())
+
+    return notificationBuilder
+      .build()
 
   }
+
+  fun createAppShortcut() {
+    val shortcut = ShortcutInfoCompat.Builder(this, shortCutId.toString())
+      .setShortLabel(callerName.toString())
+      .setLongLabel(msgCall.toString())
+      .setLongLived(true)
+      .setIcon(IconCompat.createWithResource(this, R.drawable.ic_baseline_call_missed_24))
+      .setIntent(Intent(this, Class.forName(activityLauncherName)::class.java)
+        .setAction(Intent.ACTION_MAIN))
+      .build()
+
+    ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
+    log("======================== Shortcut ===================== created ")
+
+  }
+
+  public fun deleteShortCut() {
+    val shortcutIntent = Intent(Intent.ACTION_MAIN)
+    shortcutIntent.setClassName(packageId, Const.MAIN_ACTIVITY)
+    shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    val removeIntent = Intent()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      removeIntent.putExtra(Intent.EXTRA_SHORTCUT_ID, shortCutId)
+    }
+    removeIntent.putExtra("duplicate", false)
+    removeIntent.action = "com.android.launcher.action.UNINSTALL_SHORTCUT"
+    sendBroadcast(removeIntent)
+    removeShortcut()
+    removeAllShortcuts()
+  }
+
+
+
+
+  fun removeShortcut() {
+    log("======================== removeShortcut===================== id $shortCutId")
+
+    if (Build.VERSION.SDK_INT < 25) return
+    val shortcutManager: ShortcutManager =getSystemService(ShortcutManager::class.java)
+    shortcutManager.removeDynamicShortcuts(Arrays.asList(shortCutId))
+    if (Build.VERSION.SDK_INT < 30) return
+    shortcutManager.removeLongLivedShortcuts(Arrays.asList(shortCutId))
+
+  }
+
+  fun removeAllShortcuts() {
+    log("======================== removeAllShortcuts=====================")
+
+    if (Build.VERSION.SDK_INT < 25) return
+    val shortcutManager: ShortcutManager = getSystemService(ShortcutManager::class.java)
+    shortcutManager.removeAllDynamicShortcuts()
+  }
+
+
+
+  public fun flagUpdateCurrent(mutable: Boolean): Int {
+    return if (mutable) {
+      if (Build.VERSION.SDK_INT >= 31) {
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+      } else {
+        PendingIntent.FLAG_UPDATE_CURRENT
+      }
+    } else {
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    }
+  }
+
 
   override fun onDestroy() {
     log("====================== onDestroy  ViewService")
@@ -243,24 +441,43 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
 
   fun stopService(context: Context) {
     try {
-      val stopIntent = Intent(this, RingtonePlayingService::class.java)
-      stopService(stopIntent)
 
-      notificationHelper?.removeShortcut("contact_$callSid")
-      notificationHelper?.removeAllShortcuts();
+      ringtone?.stop()
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        ringtone?.isLooping=false
+      }
+     /* onMainThread {
+        deleteShortCut()
+        removeAllShortcuts()
+        removeShortcut()
+      }*/
       doUnbindService()
+      log("stop service 1")
+
+      // Thread.currentThread().interrupt();
+      // mNotificationManager!!.cancel(Const.NOTIFICATION_ID)
+      //stopForeground(STOP_FOREGROUND_REMOVE)
+      // stopForeground(true)
+      log("stop service 2")
       //stopSelfResult(mStartId);
       tryStopService();
+      log("stop service 3")
       val closeIntent = Intent(context, ViewService::class.java)
+      log("stop service 5")
       stopService(closeIntent)
+      log("success stop service")
+      deleteShortCut()
     } catch (e: Exception) {
+      log("Error stop service A${e.toString()}")
+
       tryStopService()
     }
     isServiceStarted = false
+    //setServiceState(this, ServiceState.STOPPED)
+
   }
 
   fun handleIntent(extras: Bundle, type: String?) {
-
     try {
       val pendingFlags: Int
       pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -268,7 +485,7 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
       } else {
         PendingIntent.FLAG_UPDATE_CURRENT
       }
-      val appIntent = Intent(this, Class.forName(packageName + ".MainActivity"))
+      val appIntent = Intent(this, Class.forName(activityLauncherName))
       appIntent.action = Actions.STOP.name
       val contentIntent = PendingIntent.getActivity(
         this,
@@ -281,7 +498,7 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
         this,
         NotificationsHeadlessReceiver::class.java
       )
-      extras.putString(Const.EXTRA_ACTION, type)
+      extras.putString(Const.ACTION, type)
       headlessIntent.putExtra(Const.EXTRA_NOTIFIER, extras)
       val name = startService(headlessIntent)
       if (name != null) {
@@ -307,14 +524,16 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
     channelId: String,
     channelName: String
   ): String {
-    val channel = NotificationChannel(
-      channelId,
-      channelName, NotificationManager.IMPORTANCE_LOW
-    )
-    channel.lightColor = Color.BLUE
-    channel.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
     mNotificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    mNotificationManager!!.createNotificationChannel(channel)
+    if (mNotificationManager?.getNotificationChannel(channelId)   == null) {
+      val channel = NotificationChannel(
+        channelId,
+        channelName, NotificationManager.IMPORTANCE_HIGH
+      )
+      channel.lightColor = Color.BLUE
+      channel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+      mNotificationManager!!.createNotificationChannel(channel)
+    }
     return channelId
   }
 
@@ -324,6 +543,6 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
 
   fun cancelPushNotification(context: Context) {
     val notificationManager = NotificationManagerCompat.from(context)
-    notificationManager.cancel(Const.NOTIFICATION_ID)
+    notificationManager.cancel(Const.INCOMING_CALL_NOTIFICATION_ID)
   }
 }

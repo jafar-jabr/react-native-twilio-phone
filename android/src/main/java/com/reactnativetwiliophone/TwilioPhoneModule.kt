@@ -1,15 +1,27 @@
 package com.reactnativetwiliophone
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Context.MODE_PRIVATE
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.media.AudioManager
+import android.media.RingtoneManager
+import android.net.TrafficStats
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.LocusIdCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
-import com.reactnativetwiliophone.callView.ViewService
 import com.reactnativetwiliophone.utils.ViewUtils
 import com.twilio.voice.*
 
@@ -30,28 +42,21 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun register(accessToken: String, deviceToken: String) {
-    log("twillio Registering ")
-
+    log("Registering")
     StaticConst.IS_RUNNING = true
     Voice.register(
       accessToken,
       Voice.RegistrationChannel.FCM,
       deviceToken,
       object : RegistrationListener {
-
-        override fun hashCode(): Int {
-          log("RegistrationListener Registration hashCode hashCode ")
-
-          return super.hashCode()
-        }
         override fun onRegistered(accessToken: String, fcmToken: String) {
-          log("RegistrationListener Registration onRegistered  FCM token = $fcmToken")
+          log("Successfully registered FCM token")
 
           sendEvent(reactApplicationContext, Const.REGISTER_SUCCESS, null)
         }
 
         override fun onError(error: RegistrationException, accessToken: String, fcmToken: String) {
-          log("RegistrationListener Registration error: ${error.errorCode}  ${error.message}")
+          log("Registration error: ${error.errorCode}  ${error.message}")
 
           val params = Arguments.createMap()
           params.putInt(Const.ERROR_CODE, error.errorCode)
@@ -61,12 +66,13 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         }
       })
 
-
     val acitivity = currentActivity
     if (acitivity != null) {
       log("on register twillio ======================== save Bakage name =====================${acitivity.packageName}")
       val editor: SharedPreferences.Editor = acitivity.getSharedPreferences(Const.PREFS_NAME, MODE_PRIVATE).edit()
-      editor.putString(Const.BAKAGE_NAME, acitivity.packageName)
+      editor.putString(Const.PACKAGE_ID, acitivity.packageName)
+      editor.putString(Const.ACTIVITY_LAUNCHER_NAME, acitivity.packageName+Const.MAIN_ACTIVITY)
+
       editor.apply()
     }
 
@@ -77,14 +83,24 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     val acitivity = currentActivity
     if (acitivity != null) {
       ViewUtils.checkWindowsDrawWithDialogPermission(acitivity, reactApplicationContext);
+      //ViewUtils.checkDisplayBubblesPermission(acitivity, reactApplicationContext);
     }
   }
 
 
   @ReactMethod
   fun showCallNotification(payload: ReadableMap) {
-    log("show incomming call ------------------------------")
-    ViewUtils.showCallView(reactApplicationContext, payload);
+      log("show incomming call ------------------------------")
+      TrafficStats.clearThreadStatsTag()
+      ViewUtils.showCallView(reactApplicationContext.applicationContext, payload)
+//      Handler().postDelayed({ ViewUtils.stopService(reactApplicationContext) }, 3000)
+  }
+
+  @ReactMethod
+  fun hideCallNotification() {
+    log("hide incomming call ------------------------------")
+    TrafficStats.clearThreadStatsTag()
+    ViewUtils.stopService(reactApplicationContext.applicationContext)
   }
 
   @ReactMethod
@@ -103,14 +119,13 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         activeCallInvites[callInvite.callSid] = callInvite
 
         val from = callInvite.from ?: ""
-        val caller = from.replace(Const.CLIENT, "")
         val params = Arguments.createMap()
-        params.putString(Const.EXTRA_CALL_SID, callInvite.callSid)
-        params.putString(Const.FROM, caller)
+        params.putString(Const.CALL_SID, callInvite.callSid)
+        params.putString(Const.FROM,  from.replace(Const.CLIENT, ""))
         val pushData = Arguments.createMap()
-        pushData.putString(Const.EXTRA_CALLER_NAME, caller)
-        pushData.putString(Const.EXTRA_CALL_SID, callInvite.callSid)
-//        showCallNotification(pushData)
+        pushData.putString(Const.CALLER_NAME,  from.replace(Const.CLIENT, ""))
+        pushData.putString(Const.CALL_SID, callInvite.callSid)
+        showCallNotification(pushData)
         sendEvent(reactApplicationContext, Const.CALL_INVITE, params)
       }
 
@@ -119,12 +134,11 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         callException: CallException?
       ) {
         log("Cancelled call invite received")
-        ViewUtils.stopService(reactApplicationContext)
         activeCallInvites.remove(cancelledCallInvite.callSid)
         val params = Arguments.createMap()
-        params.putString(Const.EXTRA_CALL_SID, cancelledCallInvite.callSid)
-        ViewService().cancelPushNotification(reactApplicationContext)
+        params.putString(Const.CALL_SID, cancelledCallInvite.callSid)
         sendEvent(reactApplicationContext, Const.CANCELLED_CALL_INVITE, params)
+        hideCallNotification()
       }
     })
 
@@ -146,11 +160,13 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
 
     activeCalls[callSid] = call
     activeCallInvites.remove(callSid)
-    val params = Arguments.createMap()
-    params.putString(Const.EXTRA_CALL_SID, callSid)
-    sendEvent(reactApplicationContext, Const.CALL_CONNECTED, params)
-  }
 
+    //new not in original
+    val params = Arguments.createMap()
+    params.putString(Const.CALL_SID, callSid)
+    sendEvent(reactApplicationContext, Const.CALL_CONNECTED, params)
+    hideCallNotification();
+  }
   @ReactMethod
   fun rejectCallInvite(callSid: String) {
     log("Rejecting call invite")
@@ -163,6 +179,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
     activeCallInvites[callSid]!!.reject(reactApplicationContext)
 
     activeCallInvites.remove(callSid)
+    hideCallNotification();
   }
 
   @ReactMethod
@@ -191,7 +208,22 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
       activeCalls[callSid]!!.disconnect()
       return
     }
+    hideCallNotification();
+    log("Unknown sid to perform end-call action with")
+  }
 
+  @ReactMethod
+  fun endAllCalls() {
+    log("Ending all calls")
+    activeCallInvites.forEach { (callSid, activeCallInvite) ->
+      activeCallInvite.reject(reactApplicationContext)
+      activeCallInvites.remove(callSid)
+    }
+    activeCalls.forEach { (callSid, activeCall) ->
+      activeCall.disconnect()
+      activeCalls.remove(callSid)
+    }
+    hideCallNotification();
     log("Unknown sid to perform end-call action with")
   }
 
@@ -307,11 +339,15 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun addListener(eventName: String?) {
+    log("addListener eventName= $eventName")
+
     // Set up any upstream listeners or background tasks as necessary
   }
 
   @ReactMethod
   fun removeListeners(count: Int?) {
+    log("removeListeners")
+
     // Remove upstream listeners, stop unnecessary background tasks
   }
 
@@ -341,7 +377,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
        * raised, irrespective of the value of answerOnBridge being set to true or false
        */
       override fun onRinging(call: Call) {
-        log("================ Call did start ringing ===================")
+        log("Call did start ringing")
         /*
          * When [answerOnBridge](https://www.twilio.com/docs/voice/twiml/dial#answeronbridge)
          * is enabled in the <Dial> TwiML verb, the caller will not hear the ringback while
@@ -353,7 +389,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         activeCalls[call.sid!!] = call
 
         val params = Arguments.createMap()
-        params.putString(Const.EXTRA_CALL_SID, call.sid)
+        params.putString(Const.CALL_SID, call.sid)
 
         sendEvent(reactApplicationContext, Const.CALL_RINGING, params)
       }
@@ -362,7 +398,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         log("Call failed to connect: ${error.errorCode}, ${error.message}")
 
         val params = Arguments.createMap()
-        params.putString(Const.EXTRA_CALL_SID, call.sid)
+        params.putString(Const.CALL_SID, call.sid)
         params.putInt(Const.ERROR_CODE, error.errorCode)
         params.putString(Const.ERROR_MESSAGE, error.message)
 
@@ -373,7 +409,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         log("Call did connect")
 
         val params = Arguments.createMap()
-        params.putString(Const.EXTRA_CALL_SID, call.sid)
+        params.putString(Const.CALL_SID, call.sid)
 
         sendEvent(reactApplicationContext, Const.CALL_CONNECTED, params)
       }
@@ -384,25 +420,25 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
 
 
         val params = Arguments.createMap()
-        params.putString(Const.EXTRA_CALL_SID, call.sid)
+        params.putString(Const.CALL_SID, call.sid)
         params.putInt(Const.ERROR_CODE, error.errorCode)
         params.putString(Const.ERROR_MESSAGE, error.message)
 
-        sendEvent(reactApplicationContext, Const.CALL_CONNECTING, params)
+        sendEvent(reactApplicationContext, Const.CALL_RE_CONNECTING, params)
       }
 
       override fun onReconnected(call: Call) {
         log("Call did reconnect")
 
         val params = Arguments.createMap()
-        params.putString(Const.EXTRA_CALL_SID, call.sid)
+        params.putString(Const.CALL_SID, call.sid)
 
-        sendEvent(reactApplicationContext, Const.CALL_CONNECTED, params)
+        sendEvent(reactApplicationContext, Const.CALL_RE_CONNECTED, params)
       }
 
       override fun onDisconnected(call: Call, error: CallException?) {
         val params = Arguments.createMap()
-        params.putString(Const.EXTRA_CALL_SID, call.sid)
+        params.putString(Const.CALL_SID, call.sid)
 
         if (error != null) {
           log("Call disconnected with error: ${error.errorCode}${error.message}")
@@ -429,6 +465,71 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
       else -> {
         "UNKNOWN"
       }
+    }
+  }
+
+  @RequiresApi(Build.VERSION_CODES.O)
+  public  fun showMissedCallNotification(context:Context,shortCutId:String,msgCall:String) {
+
+    val prefs: SharedPreferences = context.getSharedPreferences(Const.PREFS_NAME, MODE_PRIVATE)
+    val callerName = prefs.getString(Const.CALLER_NAME, "irisCrm").toString() //"No name defined" is the default value.
+
+    val notificationIntent = Intent(context, Class.forName(reactApplicationContext.packageName+Const.MAIN_ACTIVITY)::class.java)
+    val pendingIntent: PendingIntent =
+      PendingIntent.getActivity(context,  Const.MISSED_CALL_REQUEST_CODE, notificationIntent,flagCanelCurrent(mutable = true))
+    val bubbleData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      NotificationCompat.BubbleMetadata.Builder(pendingIntent,
+        IconCompat.createWithResource(context, R.drawable.ic_baseline_call_missed_24))
+        .setDesiredHeight(600)
+        .build()
+    } else {
+      null
+    }
+    val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (notificationManager.getNotificationChannel(Const.MISSED_CALL_CHANNEL_ID)   == null) {
+      val channel = NotificationChannel(
+        Const.MISSED_CALL_CHANNEL_ID,
+        Const.MISSED_CALL_CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH
+      )
+      channel.lightColor = Color.BLUE
+      channel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+      notificationManager.createNotificationChannel(channel)
+    }
+    val notificationBuilder: NotificationCompat.Builder=
+      NotificationCompat.Builder(context, Const.MISSED_CALL_CHANNEL_ID)
+        .setContentIntent(pendingIntent)
+        .setSmallIcon(R.drawable.ic_baseline_call_missed_24)
+        .setContentTitle(msgCall)
+        .setContentText(callerName)
+        .setChannelId(Const.MISSED_CALL_CHANNEL_ID)
+        .setTicker("Call_STATUS")
+        .setSound(ringtoneUri)
+        .setCategory(Notification.CATEGORY_MISSED_CALL)
+        .setShortcutId("missed_$shortCutId")
+        .setLocusId(LocusIdCompat("missed_${shortCutId.toString()}"))
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .setShowWhen(true)
+    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R){
+      notificationBuilder.setBubbleMetadata(bubbleData)
+      log("SETT bubble missed call notify ************************ success")
+
+    }
+    notificationBuilder.build()
+    notificationManager.notify(0, notificationBuilder.build())
+
+  }
+
+   fun flagCanelCurrent(mutable: Boolean): Int {
+    return if (mutable) {
+      if (Build.VERSION.SDK_INT >= 31) {
+        PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
+      } else {
+        PendingIntent.FLAG_CANCEL_CURRENT
+      }
+    } else {
+      PendingIntent.FLAG_CANCEL_CURRENT
     }
   }
 }

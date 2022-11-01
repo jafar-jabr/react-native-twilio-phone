@@ -10,7 +10,7 @@
   <color name="incall_call_state_label_background">#c1daf1</color>
   <color name="incall_call_banner_text_color">#25005f</color>
 
-<color name="touch_bar_color">#1e1e1e</color>
+  <color name="touch_bar_color">#1e1e1e</color>
   <color name="close_btn_bg_color">#1e1e1e</color>
   <color name="close_btn_tint_color">#efefef</color>
   <color name="fullscreen_btn_bg_color">#1e1e1e</color>
@@ -21,11 +21,4 @@
   <color name="resize_btn_tint_color">#1e1e1e</color>
 
 
-  <!-- NEW WAY -->
-  <color name="primary">#008577</color>
-  <color name="primary_dark">#00574B</color>
-  <color name="accent">#D81B60</color>
-
-  <color name="incoming">#FBE9E7</color>
-  <color name="outgoing">#EEEEEE</color>
 </resources>
