@@ -136,6 +136,7 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         val params = Arguments.createMap()
         params.putString(Const.CALL_SID, cancelledCallInvite.callSid)
         sendEvent(reactApplicationContext, Const.CANCELLED_CALL_INVITE, params)
+        hideCallNotification()
       }
     })
 
