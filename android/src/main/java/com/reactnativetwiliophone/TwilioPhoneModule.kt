@@ -66,16 +66,6 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
         }
       })
 
-    val acitivity = currentActivity
-    if (acitivity != null) {
-      log("on register twillio ======================== save Bakage name =====================${acitivity.packageName}")
-      val editor: SharedPreferences.Editor = acitivity.getSharedPreferences(Const.PREFS_NAME, MODE_PRIVATE).edit()
-      editor.putString(Const.PACKAGE_ID, acitivity.packageName)
-      editor.putString(Const.ACTIVITY_LAUNCHER_NAME, acitivity.packageName+Const.MAIN_ACTIVITY)
-
-      editor.apply()
-    }
-
   }
 
   @ReactMethod
@@ -471,10 +461,12 @@ class TwilioPhoneModule(reactContext: ReactApplicationContext) :
 
     val prefs: SharedPreferences = context.getSharedPreferences(Const.PREFS_NAME, MODE_PRIVATE)
     val callerName = prefs.getString(Const.CALLER_NAME, "irisCrm").toString() //"No name defined" is the default value.
+    val packageName: String = context.getApplicationContext().getPackageName()
+    val targetIntent: Intent =
+      context.getPackageManager().getLaunchIntentForPackage(packageName)!!.cloneFilter()
 
-    val notificationIntent = Intent(context, Class.forName(reactApplicationContext.packageName+Const.MAIN_ACTIVITY)::class.java)
     val pendingIntent: PendingIntent =
-      PendingIntent.getActivity(context,  Const.MISSED_CALL_REQUEST_CODE, notificationIntent,flagCanelCurrent(mutable = true))
+      PendingIntent.getActivity(context,  Const.MISSED_CALL_REQUEST_CODE, targetIntent,flagCanelCurrent(mutable = true))
     val bubbleData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       NotificationCompat.BubbleMetadata.Builder(pendingIntent,
         IconCompat.createWithResource(context, R.drawable.ic_baseline_call_missed_24))

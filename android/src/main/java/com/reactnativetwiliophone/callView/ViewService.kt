@@ -45,8 +45,6 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
   var callerId: String? = null
   var callerName: String? = null
   var msgCall: String? = null
-  var activityLauncherName :String = ""
-  var packageId :String = ""
   private var ringtone: Ringtone? = null
 
   companion object {
@@ -146,9 +144,6 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 
     val prefs: SharedPreferences = this.getSharedPreferences(Const.PREFS_NAME, MODE_PRIVATE)
-    activityLauncherName = prefs.getString(Const.ACTIVITY_LAUNCHER_NAME, "com.iriscrm"+Const.MAIN_ACTIVITY).toString() //"No name defined" is the default value.
-    packageId= prefs.getString(Const.PACKAGE_ID, "com.iriscrm").toString()
-    log("======================== onStartCommand get Bakage name =====================${activityLauncherName}")
 
     if (intent != null) {
       log("onStartCommand action=" + intent.action)
@@ -283,15 +278,15 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
   //=======================================================================================
 
   fun setupNotificationBuilder(channelId: String): Notification {
-    val target = if(isDeviceLocked(this)){
-      Intent(this, ViewService::class.java)
-    }else{
-      Intent(this,  Class.forName(activityLauncherName)::class.java)
-    }
+
+    val packageName: String = this.getApplicationContext().getPackageName()
+    val targetIntent: Intent =
+      this.getPackageManager().getLaunchIntentForPackage(packageName)!!.cloneFilter()
+
 
     val pendingIntent: PendingIntent =
-      PendingIntent.getActivity(this,  Const.INCOMIN_CALL_REQUEST_CODE, target,flagUpdateCurrent(mutable = true))
-    val category = "$packageId.category.IMG_SHARE_TARGET"
+      PendingIntent.getActivity(this,  Const.INCOMIN_CALL_REQUEST_CODE, targetIntent,flagUpdateCurrent(mutable = true))
+    val category = "$packageName.category.IMG_SHARE_TARGET"
 
     val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
     val bubbleData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -304,12 +299,10 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
       null
     }
 
-    val fullScreenIntent = Intent(this, Class.forName(activityLauncherName)::class.java
-    )
     val fullScreenPendingIntent = PendingIntent.getActivity(this, Const.INCOMIN_CALL_REQUEST_CODE,
-      fullScreenIntent, flagUpdateCurrent(mutable = true))
+      targetIntent, flagUpdateCurrent(mutable = true))
 
-    createAppShortcut()
+    createAppShortcut(targetIntent)
     val notificationBuilder =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         Builder(this, channelId)
@@ -359,14 +352,13 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
 
   }
 
-  fun createAppShortcut() {
+  fun createAppShortcut(intent: Intent?) {
     val shortcut = ShortcutInfoCompat.Builder(this, shortCutId.toString())
       .setShortLabel(callerName.toString())
       .setLongLabel(msgCall.toString())
       .setLongLived(true)
       .setIcon(IconCompat.createWithResource(this, R.drawable.ic_baseline_call_missed_24))
-      .setIntent(Intent(this, Class.forName(activityLauncherName)::class.java)
-        .setAction(Intent.ACTION_MAIN))
+      .setIntent(intent!!.setAction(Intent.ACTION_MAIN))
       .build()
 
     ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
@@ -376,7 +368,7 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
 
   public fun deleteShortCut() {
     val shortcutIntent = Intent(Intent.ACTION_MAIN)
-    shortcutIntent.setClassName(packageId, Const.MAIN_ACTIVITY)
+    shortcutIntent.setClassName(this.getApplicationContext().getPackageName(), Const.MAIN_ACTIVITY)
     shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
     val removeIntent = Intent()
@@ -485,7 +477,11 @@ class ViewService : ViewServiceConfig(), Logger by LoggerImpl() {
       } else {
         PendingIntent.FLAG_UPDATE_CURRENT
       }
-      val appIntent = Intent(this, Class.forName(activityLauncherName))
+
+      val packageName: String = this.getApplicationContext().getPackageName()
+      val appIntent: Intent =
+        this.getPackageManager().getLaunchIntentForPackage(packageName)!!.cloneFilter()
+
       appIntent.action = Actions.STOP.name
       val contentIntent = PendingIntent.getActivity(
         this,

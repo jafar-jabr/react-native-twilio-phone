@@ -32,7 +32,6 @@ object Const {
 
   const val MAIN_ACTIVITY = ".MainActivity"
   const val SHARED_TARGET =  ".category.TEXT_SHARE_TARGET"
-  const val PACKAGE_ID = "package_id"
   const val SHORT_CUT_DATA_URL =   "https://com.iriscrm/call/"
   const val SHOTRT_CUT_ICON = "icon-missed-call.png"
   const val LIST_PARCABLE = "list_data_parcable"
